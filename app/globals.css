@@ -1,26 +1,197 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  /* ── Palette ── */
+  --color-void:      #070706;
+  --color-manor:     #0f0e0d;
+  --color-stone:     #181710;
+  --color-slate:     #222118;
+  --color-gold:      #c9a84c;
+  --color-gold-light:#e8c76e;
+  --color-gold-dim:  #7a6530;
+  --color-ivory:     #f0ebe0;
+  --color-parchment: #9c9178;
+  --color-ash:       #5c5648;
+
+  /* ── Typography ── */
+  --font-display: var(--font-cinzel,   'Cinzel',   Georgia, serif);
+  --font-body:    var(--font-outfit,   'Outfit',   system-ui, sans-serif);
+  --font-data:    var(--font-rajdhani, 'Rajdhani', 'Outfit', sans-serif);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ── Base ─────────────────────────────────────────────────────────── */
+
+*, *::before, *::after {
+  box-sizing: border-box;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: #070706;
+  color: #f0ebe0;
+  font-family: var(--font-body);
 }
+
+/* ── Scrollbar ─────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar              { width: 4px; }
+::-webkit-scrollbar-track        { background: #0f0e0d; }
+::-webkit-scrollbar-thumb        { background: #3a3628; border-radius: 0; }
+::-webkit-scrollbar-thumb:hover  { background: #c9a84c; }
+
+/* ── Animations ────────────────────────────────────────────────────── */
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(201, 168, 76, 0.15), 0 0 0 1px rgba(201, 168, 76, 0.2); }
+  50%       { box-shadow: 0 0 40px rgba(201, 168, 76, 0.3),  0 0 0 1px rgba(201, 168, 76, 0.4); }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+.animate-glow-pulse { animation: glow-pulse 3s ease-in-out infinite; }
+.animate-fade-up    { animation: fade-up   0.6s ease forwards; opacity: 0; }
+.animate-fade-in    { animation: fade-in   0.4s ease forwards; opacity: 0; }
+
+/* ── Gold shimmer text ─────────────────────────────────────────────── */
+
+.text-gold-shimmer {
+  background: linear-gradient(90deg, #c9a84c 0%, #e8c76e 40%, #c9a84c 60%, #a07830 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 4s linear infinite;
+}
+
+/* ── Card gold top-line ────────────────────────────────────────────── */
+
+.card-manor {
+  background: #0f0e0d;
+  border: 1px solid rgba(201, 168, 76, 0.12);
+  position: relative;
+  transition: border-color 0.3s ease;
+}
+
+.card-manor::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(201, 168, 76, 0.5) 50%, transparent 100%);
+}
+
+.card-manor:hover {
+  border-color: rgba(201, 168, 76, 0.28);
+}
+
+/* ── Clerk overrides ───────────────────────────────────────────────── */
+
+/* Force all text inside Clerk cards to be readable */
+.cl-card,
+.cl-card * {
+  color: #f0ebe0 !important;
+}
+
+/* Slightly muted for secondary / helper text */
+.cl-headerSubtitle,
+.cl-footerActionText,
+[class*="cl-headerSubtitle"],
+[class*="cl-footerAction"] {
+  color: #c8bfa8 !important;
+}
+
+/* Keep primary action button text dark on gold */
+.cl-formButtonPrimary,
+.cl-formButtonPrimary * {
+  color: #070706 !important;
+}
+
+/* ── Clerk input overrides ─────────────────────────────────────────── */
+
+.cl-formFieldInput,
+.cl-input,
+[class*="cl-formFieldInput"],
+[class*="cl-input"] {
+  background-color: #181710 !important;
+  color: #f0ebe0 !important;
+  border-color: rgba(201, 168, 76, 0.2) !important;
+}
+
+.cl-formFieldInput:focus,
+.cl-input:focus {
+  border-color: rgba(201, 168, 76, 0.5) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 1px rgba(201, 168, 76, 0.3) !important;
+}
+
+.cl-formFieldInput::placeholder,
+.cl-input::placeholder,
+[class*="cl-formFieldInput"]::placeholder,
+[class*="cl-input"]::placeholder {
+  color: #9c9178 !important;
+  opacity: 1 !important;
+}
+
+/* ── Autofill override (keeps dark bg on browser-filled inputs) ────── */
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: #f0ebe0 !important;
+  -webkit-box-shadow: 0 0 0px 1000px #181710 inset !important;
+  transition: background-color 5000s ease-in-out 0s;
+  caret-color: #f0ebe0;
+}
+
+/* ── Button styles ─────────────────────────────────────────────────── */
+
+.btn-gold {
+  background: #c9a84c;
+  color: #070706;
+  font-family: var(--font-display);
+  letter-spacing: 0.15em;
+  font-size: 0.7rem;
+  padding: 0.625rem 1.5rem;
+  font-weight: 600;
+  transition: background 0.2s ease, transform 0.1s ease;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-gold:hover:not(:disabled)  { background: #e8c76e; }
+.btn-gold:active:not(:disabled) { transform: scale(0.98); }
+.btn-gold:disabled               { opacity: 0.4; cursor: not-allowed; }
+
+.btn-outline {
+  background: transparent;
+  color: #9c9178;
+  font-family: var(--font-display);
+  letter-spacing: 0.12em;
+  font-size: 0.65rem;
+  padding: 0.55rem 1.1rem;
+  font-weight: 400;
+  border: 1px solid rgba(201, 168, 76, 0.2);
+  transition: border-color 0.2s ease, color 0.2s ease;
+  cursor: pointer;
+}
+
+.btn-outline:hover:not(:disabled)  { border-color: rgba(201, 168, 76, 0.5); color: #c9a84c; }
+.btn-outline:disabled               { opacity: 0.4; cursor: not-allowed; }
