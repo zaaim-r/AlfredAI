@@ -66,13 +66,14 @@ export async function POST() {
 
   // Seed default categories if none exist yet (Clerk webhook may not have fired)
   if (categories.length === 0) {
-    const defaults = [
-      'Uncategorized', 'Food', 'Coffee', 'Transport', 'Shopping',
-      'Entertainment', 'Utilities', 'Subscriptions', 'Income',
-      'Credit Card Payment', 'Transfer', 'Other',
-    ]
+    // is_system = true only for internal categories the sync logic depends on (never shown in UI)
+    const internalNames = ['Income', 'Credit Card Payment', 'Transfer']
+    const userNames     = ['Uncategorized', 'Food', 'Coffee', 'Transport', 'Shopping', 'Entertainment', 'Utilities', 'Subscriptions', 'Other']
     await prisma.category.createMany({
-      data: defaults.map((name) => ({ name, user_id: userId, is_system: true })),
+      data: [
+        ...internalNames.map((name) => ({ name, user_id: userId, is_system: true })),
+        ...userNames.map((name)     => ({ name, user_id: userId, is_system: false })),
+      ],
       skipDuplicates: true,
     })
     categories = await prisma.category.findMany({
@@ -85,7 +86,7 @@ export async function POST() {
   // Ensure Uncategorized always exists as a fallback
   if (!catByName.get('uncategorized')) {
     const uc = await prisma.category.create({
-      data: { name: 'Uncategorized', user_id: userId, is_system: true },
+      data: { name: 'Uncategorized', user_id: userId, is_system: false },
     })
     catByName.set('uncategorized', uc)
   }
@@ -95,29 +96,38 @@ export async function POST() {
 
   let totalSynced = 0
 
-  for (const account of accounts) {
+  // Fetch all accounts in parallel, then batch-write
+  const accountResults = await Promise.allSettled(
+    accounts.map(async (account) => {
+      const [balance, txns] = await Promise.all([
+        getTellerBalance(account.teller_access_token, account.teller_account_id),
+        getTellerTransactions(account.teller_access_token, account.teller_account_id),
+      ])
+      return { account, balance, txns }
+    })
+  )
+
+  for (const result of accountResults) {
+    if (result.status === 'rejected') {
+      const msg = String(result.reason)
+      console.error('Teller fetch failed:', msg)
+      continue
+    }
+
+    const { account, balance, txns } = result.value
     try {
-      // Update balance
-      const balance = await getTellerBalance(
-        account.teller_access_token,
-        account.teller_account_id,
-      )
       const newBalance = Math.abs(parseFloat(balance.ledger ?? '0'))
 
-      // Fetch transactions
-      const txns = await getTellerTransactions(
-        account.teller_access_token,
-        account.teller_account_id,
-      )
+      // Build rows for all transactions from this account
+      const rows = txns.map((t: Record<string, unknown>) => {
+        const amount       = parseFloat(t.amount as string)
+        const merchantName = (t.details as Record<string, unknown>)?.counterparty
+          ? ((t.details as Record<string, unknown>).counterparty as Record<string, unknown>)?.name as string
+          : t.description as string
+        const tellerCat    = (((t.details as Record<string, unknown>)?.category as string) ?? '').toLowerCase()
 
-      for (const t of txns) {
-        const amount = parseFloat(t.amount)
-        const merchantName = t.details?.counterparty?.name ?? t.description
-        const tellerCat = (t.details?.category ?? '').toLowerCase()
-
-        // Determine category
         let categoryName: string
-        if (account.type === 'credit' && amount > 0) {
+        if (account.type === 'credit' && amount < 0) {
           categoryName = 'Credit Card Payment'
         } else if (account.type !== 'credit' && amount > 0) {
           categoryName = 'Income'
@@ -126,40 +136,64 @@ export async function POST() {
         }
 
         const category = getCategory(categoryName)
-        if (!category) continue
+        return {
+          teller_transaction_id: t.id as string,
+          user_id:     userId,
+          account_id:  account.id,
+          date:        new Date(t.date as string),
+          amount,
+          merchant_name: merchantName,
+          category_id:   category.id,
+          status:        (t.status as string) === 'posted' ? 'posted' as const : 'pending' as const,
+        }
+      })
 
-        await prisma.transaction.upsert({
-          where: { teller_transaction_id: t.id },
-          create: {
-            user_id: userId,
-            account_id: account.id,
-            teller_transaction_id: t.id,
-            date: new Date(t.date),
-            amount: amount,
-            merchant_name: merchantName,
-            category_id: category.id,
-            status: t.status === 'posted' ? 'posted' : 'pending',
-          },
-          update: {
-            status: t.status === 'posted' ? 'posted' : 'pending',
-            merchant_name: merchantName,
-          },
-        })
+      // Load existing teller IDs for this account to diff new vs existing
+      const existingIds = new Set(
+        (await prisma.transaction.findMany({
+          where:  { account_id: account.id },
+          select: { teller_transaction_id: true },
+        })).map((r) => r.teller_transaction_id)
+      )
 
-        totalSynced++
+      const newRows      = rows.filter((r) => !existingIds.has(r.teller_transaction_id))
+      const existingRows = rows.filter((r) =>  existingIds.has(r.teller_transaction_id))
+
+      // Insert new transactions in one batch
+      if (newRows.length > 0) {
+        await prisma.transaction.createMany({ data: newRows, skipDuplicates: true })
       }
 
+      // Update all existing transactions in one query (status + merchant only, preserve categories)
+      if (existingRows.length > 0) {
+        // Group by status so we can use two updateMany calls at most
+        const postedIds  = existingRows.filter((r) => r.status === 'posted').map((r) => r.teller_transaction_id)
+        const pendingIds = existingRows.filter((r) => r.status === 'pending').map((r) => r.teller_transaction_id)
+        await Promise.all([
+          postedIds.length > 0 && prisma.transaction.updateMany({
+            where: { teller_transaction_id: { in: postedIds } },
+            data:  { status: 'posted' },
+          }),
+          pendingIds.length > 0 && prisma.transaction.updateMany({
+            where: { teller_transaction_id: { in: pendingIds } },
+            data:  { status: 'pending' },
+          }),
+        ])
+      }
+
+      // Update account balance
       await prisma.account.update({
         where: { id: account.id },
-        data: { current_balance: newBalance, last_synced_at: new Date() },
+        data:  { current_balance: newBalance, last_synced_at: new Date() },
       })
+
+      totalSynced += rows.length
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      // If Teller returns 401/403, the enrollment was revoked — deactivate account
       if (msg.includes('401') || msg.includes('403')) {
         await prisma.account.update({
           where: { id: account.id },
-          data: { is_active: false },
+          data:  { is_active: false },
         })
       }
       console.error(`Sync failed for account ${account.id}:`, msg)

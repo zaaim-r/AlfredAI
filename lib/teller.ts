@@ -33,7 +33,7 @@ interface FetchLike {
   json(): Promise<unknown>
 }
 
-function tellerFetch(url: string, accessToken: string): Promise<FetchLike> {
+function tellerFetchOnce(url: string, accessToken: string): Promise<FetchLike> {
   const headers: Record<string, string> = {
     Authorization: 'Basic ' + Buffer.from(`${accessToken}:`).toString('base64'),
     'Teller-Version': '2020-10-12',
@@ -49,6 +49,7 @@ function tellerFetch(url: string, accessToken: string): Promise<FetchLike> {
         path: parsed.pathname + parsed.search,
         method: 'GET',
         headers,
+        timeout: 15000,
         ...(tls ?? {}),
       },
       (res) => {
@@ -65,9 +66,26 @@ function tellerFetch(url: string, accessToken: string): Promise<FetchLike> {
         })
       },
     )
+    req.on('timeout', () => { req.destroy(); reject(new Error('Request timed out')) })
     req.on('error', reject)
     req.end()
   })
+}
+
+async function tellerFetch(url: string, accessToken: string, retries = 3): Promise<FetchLike> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await tellerFetchOnce(url, accessToken)
+    } catch (err) {
+      const isLast = attempt === retries
+      const msg = err instanceof Error ? err.message : String(err)
+      const retryable = msg.includes('socket hang up') || msg.includes('ECONNRESET') || msg.includes('timed out')
+      if (isLast || !retryable) throw err
+      // Brief backoff before retry
+      await new Promise((r) => setTimeout(r, attempt * 500))
+    }
+  }
+  throw new Error('tellerFetch: exhausted retries')
 }
 
 // ── Teller API types ──────────────────────────────────────────────────────────

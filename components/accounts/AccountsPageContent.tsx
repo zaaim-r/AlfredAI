@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useState } from 'react'
 import Script from 'next/script'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
@@ -12,10 +12,7 @@ import {
   EyeOff,
   Unplug,
   WifiOff,
-  LogOut,
-  ChevronDown,
 } from 'lucide-react'
-import { useUser, useClerk } from '@clerk/nextjs'
 import { formatCurrency } from '@/lib/utils'
 
 // ── Teller Connect global type ──────────────────────────────────────────────
@@ -94,95 +91,6 @@ const btnOutline = [
   'bg-transparent',
 ].join(' ')
 
-// ── User Menu ─────────────────────────────────────────────────────────────────
-
-function UserMenu() {
-  const { user } = useUser()
-  const { signOut } = useClerk()
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [])
-
-  const initials = user
-    ? (user.firstName?.[0] ?? '') + (user.lastName?.[0] ?? '')
-    : '?'
-  const displayName = user?.fullName ?? user?.primaryEmailAddress?.emailAddress ?? ''
-  const email = user?.primaryEmailAddress?.emailAddress ?? ''
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-2.5 cursor-pointer bg-transparent border-0 p-0"
-        aria-label="Account menu"
-      >
-        {/* Avatar circle */}
-        <div
-          className="w-8 h-8 flex items-center justify-center font-display text-[10px] tracking-widest"
-          style={{
-            background: 'rgba(201, 168, 76, 0.12)',
-            border: '1px solid rgba(201, 168, 76, 0.4)',
-            color: '#c9a84c',
-          }}
-        >
-          {initials || '?'}
-        </div>
-        <div className="hidden sm:flex flex-col items-start">
-          <span className="font-display text-[9px] tracking-[0.15em] uppercase text-ivory leading-none">
-            {displayName}
-          </span>
-          {email && displayName !== email && (
-            <span className="text-ash text-[8px] tracking-wide mt-0.5">{email}</span>
-          )}
-        </div>
-        <ChevronDown
-          className="h-3 w-3 text-ash transition-transform duration-200"
-          style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}
-        />
-      </button>
-
-      {open && (
-        <div
-          className="absolute right-0 top-full mt-2 w-52 z-50"
-          style={{
-            background: '#0f0e0d',
-            border: '1px solid rgba(201, 168, 76, 0.2)',
-            boxShadow: '0 8px 40px rgba(0,0,0,0.8)',
-          }}
-        >
-          {/* Email header */}
-          <div className="px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-            <p className="font-display text-[9px] tracking-[0.15em] uppercase text-ivory truncate">
-              {displayName}
-            </p>
-            {email && displayName !== email && (
-              <p className="text-ash text-[8px] tracking-wide mt-0.5 truncate">{email}</p>
-            )}
-          </div>
-
-          {/* Actions */}
-          <div className="py-1">
-            <button
-              onClick={() => { setOpen(false); signOut({ redirectUrl: '/' }) }}
-              className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-ash hover:text-red-400 hover:bg-white/5 transition-colors duration-150 cursor-pointer bg-transparent border-0"
-            >
-              <LogOut className="h-3 w-3 flex-shrink-0" />
-              <span className="font-display text-[9px] tracking-[0.15em] uppercase">Sign Out</span>
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ── Account Card ──────────────────────────────────────────────────────────────
 
 function AccountCard({
@@ -196,7 +104,7 @@ function AccountCard({
   disconnecting: boolean
   animationDelay?: string
 }) {
-  const [balanceVisible, setBalanceVisible] = useState(true)
+  const [balanceVisible, setBalanceVisible] = useState(false)
   const meta = TYPE_META[account.type]
   const balance = parseFloat(account.current_balance)
   const isCredit = account.type === 'credit'
@@ -373,31 +281,12 @@ export function AccountsPageContent({
         strategy="afterInteractive"
       />
 
-      <div className="min-h-screen bg-void px-6 md:px-10 py-10">
+      <div className="min-h-screen bg-void px-6 md:px-10 pt-20 pb-10">
         <div className="max-w-5xl mx-auto">
 
           {/* ── Header ── */}
-          <div className="flex items-start justify-between mb-12">
-            <div className="flex items-center gap-4">
-              <div
-                className="w-9 h-9 flex-shrink-0 flex items-center justify-center"
-                style={{
-                  transform: 'rotate(45deg)',
-                  border: '1px solid rgba(201, 168, 76, 0.5)',
-                }}
-              >
-                <span
-                  className="font-display text-sm text-gold"
-                  style={{ transform: 'rotate(-45deg)' }}
-                >
-                  A
-                </span>
-              </div>
-              <div>
-                <h1 className="font-display text-lg tracking-[0.25em] text-ivory">ALFRED</h1>
-                <p className="text-ash text-[10px] tracking-[0.15em] mt-0.5 italic">{greeting}</p>
-              </div>
-            </div>
+          <div className="flex items-center justify-between mb-12">
+            <p className="text-ash text-[10px] tracking-[0.15em] italic">{greeting}</p>
 
             <div className="flex items-center gap-3">
               <button
@@ -418,11 +307,6 @@ export function AccountsPageContent({
                   : <Plus    className="h-3.5 w-3.5" />}
                 {connecting ? 'Connecting…' : 'Connect Account'}
               </button>
-              <div
-                className="w-px h-6 self-center"
-                style={{ background: 'rgba(201,168,76,0.2)' }}
-              />
-              <UserMenu />
             </div>
           </div>
 

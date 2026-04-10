@@ -114,9 +114,10 @@ model Category {
   id                String   @id @default(cuid())
   user_id           String?  // null = system category
   name              String
-  monthly_limit     Decimal? @db.Decimal(12, 2)
-  warning_threshold Int      @default(80)
-  is_system         Boolean  @default(false)
+  monthly_limit          Decimal? @db.Decimal(12, 2)
+  warning_threshold      Decimal  @default(80) @db.Decimal(12, 2)
+  warning_threshold_type String   @default("percent") // "percent" | "amount"
+  is_system              Boolean  @default(false)
   color             String   @default("#6366f1")
   icon              String   @default("circle")
   rollover_history  Json?

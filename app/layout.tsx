@@ -3,6 +3,7 @@ import { Cinzel, Outfit, Rajdhani } from 'next/font/google'
 import './globals.css'
 import { Providers } from '@/components/providers'
 import { SyncTrigger } from '@/components/SyncTrigger'
+import { Nav } from '@/components/Nav'
 
 const cinzel = Cinzel({
   subsets: ['latin'],
@@ -64,6 +65,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <body>
           <Providers>
             <SyncTrigger />
+            <Nav />
             {children}
           </Providers>
         </body>
